@@ -120,7 +120,7 @@ void limpiarMemoria() {
     SDL_Quit();
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     // el Instruct pointer empieza aqui
     // llamo al driver de video y a la GPU inicializando el sistema.
     inicializarSistema();
