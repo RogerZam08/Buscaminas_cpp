@@ -48,7 +48,7 @@ void limpiarMemoria() {
     SDL_Quit();
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     inicializarSistema();
     const std::chrono::milliseconds tiempoPorFrame(16); // ~60 FPS
 
