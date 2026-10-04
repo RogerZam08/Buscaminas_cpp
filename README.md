@@ -9,12 +9,30 @@ Proyecto colaborativo diseñado para dominar la arquitectura de software, gesti�
 
 ## Tecnologías
 * **Lenguaje:** C++17 (Uso de punteros inteligentes y la STL)
-* **Compilación:** CMake (Out-of-source build)
-* **Gráficos:** SDL2 (Próximamente)
+* **Compilación:** CMake (Out-of-source build, enlace estático)
+* **Gráficos:** (Integrado automáticamente vía FetchContent)
 
-## Cómo compilar (Linux / Windows)
-1. Clonar el repositorio.
-2. Crear un directorio de compilación: `mkdir build && cd build`
-3. Generar archivos del sistema: `cmake ..`
-4. Compilar el ejecutable: `cmake --build .`
-5. Ejecutar: `./juego` (o `juego.exe` en Windows)
+## Tecnologías
+* Diríjase a la pestaña de Releases en el panel derecho de este repositorio en GitHub.
+* Descargue el archivo correspondiente a su sistema (Buscaminas_Windows.zip o Buscaminas_Linux.tar.gz).
+* Extraiga el archivo y haga doble clic en el ejecutable. No requiere instalación.
+
+🛠️ Cómo compilar desde el código fuente (Linux / Windows)
+
+Requisitos previos:
+
+CMake versión 3.14 o superior.
+
+Conexión a internet activa (obligatoria únicamente la primera vez para descargar la librería gráfica SDL2).
+
+Pasos de compilación:
+
+Clonar el repositorio.
+
+Crear un directorio de compilación: mkdir build && cd build
+
+Generar archivos del sistema: cmake .. (Nota: Este paso puede tomar unos minutos mientras descarga SDL2).
+
+Compilar el ejecutable: cmake --build .
+
+Ejecutar: ./juego (o juego.exe en Windows)
