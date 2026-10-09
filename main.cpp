@@ -1,4 +1,5 @@
 #include <SDL2/SDL.h>
+#include <SDL_ttf.h> // NUEVA LIBRERÍA
 #include <iostream>
 #include <chrono>
 #include <thread>
@@ -17,6 +18,11 @@ bool juegoActivo = true;
 EstadoJuego estadoActual = EstadoJuego::MENU_PRINCIPAL; 
 SDL_Window* ventana = nullptr;
 SDL_Renderer* renderizador = nullptr;
+// Nuevos Punteros Globales para la tipografía
+TTF_Font* fuente = nullptr;
+SDL_Texture* texturaTextoMenu = nullptr; 
+SDL_Rect rectanguloTexto; // Estructura que define posición (X, Y) y tamaño (Ancho, Alto)
+
 
 // 2. LA ESTRUCTURA DE MEMORIA (La Casilla)
 struct Casilla {
@@ -42,13 +48,39 @@ void crearTablero(int filas, int columnas) {
 void inicializarSistema() {
     SDL_Init(SDL_INIT_VIDEO);
     
-    // Pedimos al OS memoria para la ventana
-    ventana = SDL_CreateWindow("Buscaminas - Roger & Pablito", 
-                               SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 
-                               800, 600, SDL_WINDOW_SHOWN);
-                               
-    // Pedimos acceso a la GPU para dibujar
+    // Iniciar el subsistema de fuentes
+    if (TTF_Init() == -1) {
+        std::cerr << "Error crítico: No se pudo inicializar TTF: " << TTF_GetError() << "\n";
+        exit(1);
+    }
+
+    ventana = SDL_CreateWindow("Buscaminas - Roger & Pablito", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 800, 600, SDL_WINDOW_SHOWN);
     renderizador = SDL_CreateRenderer(ventana, -1, SDL_RENDERER_ACCELERATED);
+
+    // --- RENDERIZADO DE TEXTO EN CACHÉ (Solo se hace una vez) ---
+    // IMPORTANTE: Asegúrate de tener este archivo tipográfico en tu carpeta build
+    fuente = TTF_OpenFont("GOUDYSTO.TTF", 20); 
+    if (!fuente) {
+        std::cerr << "Error: No se encontró la fuente GOUDYSTO.ttf. Verifica la ruta.\n";
+        exit(1);
+    }
+
+    SDL_Color colorBlanco = {255, 255, 255, 255};
+    
+    // 1. La CPU dibuja el texto en la memoria RAM lenta (Surface)
+    SDL_Surface* superficieTexto = TTF_RenderUTF8_Solid(fuente, "Press ENTER to start", colorBlanco);
+    
+    // 2. Transferimos la imagen de la RAM a la VRAM rápida (Texture)
+    texturaTextoMenu = SDL_CreateTextureFromSurface(renderizador, superficieTexto);
+    
+    // 3. Calculamos la posición centrada matemáticamente
+    rectanguloTexto.w = superficieTexto->w;
+    rectanguloTexto.h = superficieTexto->h;
+    rectanguloTexto.x = (800 - rectanguloTexto.w) / 2;
+    rectanguloTexto.y = (600 - rectanguloTexto.h) / 2;
+
+    // 4. Destruimos la Surface de la RAM (ya está segura en la VRAM de la GPU)
+    SDL_FreeSurface(superficieTexto);
 }
 
 void procesarEntrada() {
@@ -86,12 +118,16 @@ void procesarLogica() {
             break;
     }
 }
+
 void dibujarPantalla() {
     // La GPU bifurca el dibujado leyendo la RAM
     switch (estadoActual) {
         case EstadoJuego::MENU_PRINCIPAL:
-            // Azul Marino para el menú
             SDL_SetRenderDrawColor(renderizador, 10, 20, 60, 255);
+            SDL_RenderClear(renderizador);
+            
+            // Le ordenamos a la GPU que copie la textura que ya está en su memoria
+            SDL_RenderCopy(renderizador, texturaTextoMenu, NULL, &rectanguloTexto);
             break;
             
         case EstadoJuego::JUGANDO:
@@ -107,14 +143,18 @@ void dibujarPantalla() {
     }
 
     // Una vez seleccionado el color, inundamos la VRAM y volteamos el buffer
-    SDL_RenderClear(renderizador);
     SDL_RenderPresent(renderizador);
 }
 
 
 void limpiarMemoria() {
-    // Destruimos los punteros crudos para evitar Memory Leaks
     std::cout << "Liberando VRAM y RAM...\n";
+    
+    // Destruimos la nueva memoria reservada en orden inverso
+    SDL_DestroyTexture(texturaTextoMenu);
+    TTF_CloseFont(fuente);
+    TTF_Quit(); // Apagamos el motor tipográfico
+    
     SDL_DestroyRenderer(renderizador);
     SDL_DestroyWindow(ventana);
     SDL_Quit();

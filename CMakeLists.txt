@@ -16,6 +16,8 @@ if(WIN32)
     set(SDL_TESTS OFF CACHE BOOL "" FORCE)
     set(SDL_SHARED OFF CACHE BOOL "" FORCE)
     set(SDL_STATIC ON CACHE BOOL "" FORCE)
+    set(SDL2TTF_SHARED OFF CACHE BOOL "" FORCE)
+    set(SDL2TTF_STATIC ON CACHE BOOL "" FORCE)
 
     FetchContent_Declare(
         SDL2
@@ -24,22 +26,36 @@ if(WIN32)
     )
     FetchContent_MakeAvailable(SDL2)
 
-    # Pablo enlaza las bibliotecas estáticas compiladas
-    target_link_libraries(juego PRIVATE SDL2::SDL2main SDL2::SDL2-static)
+    FetchContent_Declare(
+        SDL2_ttf
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL_ttf.git
+        GIT_TAG release-2.22.0
+    )
+    FetchContent_MakeAvailable(SDL2_ttf)
+
+    # 3. Enlazador de Windows (Estático) - Llamamos al target crudo: SDL2_ttf-static
+   target_link_libraries(juego PRIVATE SDL2::SDL2main SDL2::SDL2-static SDL2_ttf)
 
     # Ocultar la consola de fondo en Windows
     set_target_properties(juego PROPERTIES WIN32_EXECUTABLE TRUE)
 
 elseif(UNIX)
     # ===== (LINUX / CACHYOS) =====
-    message(STATUS "Detectado entorno Linux. Buscando SDL2 en el sistema...")
-    
-    # Esto le dice a CMake que use el buscador oficial del sistema para encontrar tus librerias locales
+    message(STATUS "Detectado entorno Linux. Buscando dependencias...")
+
+    # 1. Buscar SDL2 base en el OS de Roger
     find_package(SDL2 REQUIRED)
-    
-    # Tú enlazas las bibliotecas dinámicas compartidas de tu OS
-    target_link_libraries(juego PRIVATE SDL2::SDL2)
-    
-    # (NOTA: Si vas a usar fuentes TTF mas adelante, agrega también SDL2_ttf aquí)
-    # target_link_libraries(juego PRIVATE SDL2::SDL2 SDL2_ttf)
+
+    # 2. Descargar SDL2_ttf para Linux
+    include(FetchContent)
+    FetchContent_Declare(
+        SDL2_ttf
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL_ttf.git
+        GIT_TAG release-2.22.0
+    )
+    FetchContent_MakeAvailable(SDL2_ttf)
+
+    # 3. Enlazador de Linux (Dinámico para SDL2, Estático para TTF)
+    # Fíjate que aquí solo hay UNA sola línea de target_link_libraries, borra las demás que tenías duplicadas.
+    target_link_libraries(juego PRIVATE SDL2::SDL2 SDL2_ttf::SDL2_ttf-static)
 endif()
