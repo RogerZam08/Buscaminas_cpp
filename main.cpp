@@ -4,38 +4,33 @@
 #include <thread>
 #include <vector>
 
-// 1. LA MÁQUINA DE ESTADOS
-// Usamos 'enum class' porque solo queremos usar valores determinados.
-enum class EstadoJuego {
-    MENU_PRINCIPAL,
-    JUGANDO,
-    GAME_OVER
-};
+enum class EstadoJuego { MENU_PRINCIPAL, JUGANDO, GAME_OVER };
 
-// Variables globales del motor (Punteros a la memoria gráfica)
 bool juegoActivo = true;
 EstadoJuego estadoActual = EstadoJuego::MENU_PRINCIPAL; 
 SDL_Window* ventana = nullptr;
 SDL_Renderer* renderizador = nullptr;
 
-// 2. LA ESTRUCTURA DE MEMORIA (La Casilla)
 struct Casilla {
-    bool tieneMina = false;      // ¿Hay una bomba aquí?
-    bool descubierta = false;    // ¿El jugador ya hizo clic aquí?
-    bool tieneBandera = false;   // ¿El jugador puso una banderita (click derecho)?
-    int minasAlrededor = 0;      // Número a mostrar (del 1 al 8)
+    bool tieneMina = false;
+    bool descubierta = false;
+    bool tieneBandera = false;
+    int minasAlrededor = 0;
 };
 
-//  EL TABLERO (El mapa de memoria)
-// std::vector anidado crea una matriz dinámica en el Heap.
 std::vector<std::vector<Casilla>> tablero;
 
-// Función para inicializar la memoria del tablero
+// --- DECLARACIONES ADELANTADAS (Promesas de memoria) ---
+void crearTablero(int filas, int columnas);
+void inicializarSistema();
+void procesarEntrada();
+void procesarLogica();
+void dibujarPantalla(); // La firma que agregamos
+void limpiarMemoria();
+
+// --- DEFINICIONES (Código máquina real) ---
 void crearTablero(int filas, int columnas) {
-    // Redimensionamos la matriz en la memoria RAM
-    // Asigna un bloque de 'filas' que contienen vectores de 'columnas' de Casillas vacías.
     tablero.resize(filas, std::vector<Casilla>(columnas));
-    
     std::cout << "Tablero de " << filas << "x" << columnas << " creado en el Heap.\n";
 }
 
@@ -78,27 +73,46 @@ void procesarLogica() {
             // Aquí en el futuro puedes hacer titilar un texto de "Presione ENTER"
             break;
             
-        case EstadoJuego::JUGANDO:
-            // Aquí procesaremos si el jugador pierde o gana
+        case EstadoJuego::JUGANDO: {
+            // 1. Limpiar el fondo de toda la ventana (Gris oscuro)
+            SDL_SetRenderDrawColor(renderizador, 30, 30, 30, 255);
+            SDL_RenderClear(renderizador);
+
+            // 2. Definir la geometría de tu cuadrícula
+            const int tamanoCasilla = 40; // Cada cuadro medirá 40x40 píxeles
+            const int offsetX = 200;      // Margen izquierdo para centrar el tablero en la ventana
+            const int offsetY = 100;      // Margen superior
+
+            // 3. Recorrer la memoria dinámica del tablero
+            for (int fila = 0; fila < tablero.size(); ++fila) {
+                for (int col = 0; col < tablero[fila].size(); ++col) {
+                    
+                    // Calcular las coordenadas físicas en la VRAM
+                    SDL_Rect rect;
+                    rect.x = offsetX + (col * tamanoCasilla);
+                    rect.y = offsetY + (fila * tamanoCasilla);
+                    rect.w = tamanoCasilla;
+                    rect.h = tamanoCasilla;
+
+                    // 4. Leer el estado de tu Struct Casilla para decidir el color
+                    if (tablero[fila][col].descubierta) {
+                        // Si está descubierta, fondo gris claro
+                        SDL_SetRenderDrawColor(renderizador, 200, 200, 200, 255);
+                    } else {
+                        // Si está oculta, color azul/grisáceo (como bloques de piedra)
+                        SDL_SetRenderDrawColor(renderizador, 100, 120, 140, 255);
+                    }
+                    
+                    // Enviar orden a la GPU para rellenar el cuadro
+                    SDL_RenderFillRect(renderizador, &rect);
+
+                    // 5. Dibujar un contorno negro alrededor del cuadro para separarlos
+                    SDL_SetRenderDrawColor(renderizador, 0, 0, 0, 255);
+                    SDL_RenderDrawRect(renderizador, &rect);
+                }
+            }
             break;
-            
-        case EstadoJuego::GAME_OVER:
-            break;
-    }
-}
-void dibujarPantalla() {
-    // La GPU bifurca el dibujado leyendo la RAM
-    switch (estadoActual) {
-        case EstadoJuego::MENU_PRINCIPAL:
-            // Azul Marino para el menú
-            SDL_SetRenderDrawColor(renderizador, 10, 20, 60, 255);
-            break;
-            
-        case EstadoJuego::JUGANDO:
-            // Gris Oscuro para el tablero
-            SDL_SetRenderDrawColor(renderizador, 40, 40, 40, 255);
-            // Próximamente: Iterar sobre tu std::vector tablero aquí
-            break;
+        }
             
         case EstadoJuego::GAME_OVER:
             // Rojo Oscuro para la derrota
@@ -111,6 +125,51 @@ void dibujarPantalla() {
     SDL_RenderPresent(renderizador);
 }
 
+void dibujarPantalla() {
+    switch (estadoActual) {
+        case EstadoJuego::MENU_PRINCIPAL:
+            SDL_SetRenderDrawColor(renderizador, 10, 20, 60, 255);
+            SDL_RenderClear(renderizador);
+            break;
+            
+        case EstadoJuego::JUGANDO: {
+            SDL_SetRenderDrawColor(renderizador, 30, 30, 30, 255);
+            SDL_RenderClear(renderizador);
+
+            const int tamanoCasilla = 40;
+            const int offsetX = 200;
+            const int offsetY = 100;
+
+            for (size_t fila = 0; fila < tablero.size(); ++fila) {
+                for (size_t col = 0; col < tablero[fila].size(); ++col) {
+                    SDL_Rect rect;
+                    rect.x = offsetX + (col * tamanoCasilla);
+                    rect.y = offsetY + (fila * tamanoCasilla);
+                    rect.w = tamanoCasilla;
+                    rect.h = tamanoCasilla;
+
+                    if (tablero[fila][col].descubierta) {
+                        SDL_SetRenderDrawColor(renderizador, 200, 200, 200, 255);
+                    } else {
+                        SDL_SetRenderDrawColor(renderizador, 100, 120, 140, 255);
+                    }
+                    
+                    SDL_RenderFillRect(renderizador, &rect);
+                    SDL_SetRenderDrawColor(renderizador, 0, 0, 0, 255);
+                    SDL_RenderDrawRect(renderizador, &rect);
+                }
+            }
+            break;
+        }
+            
+        case EstadoJuego::GAME_OVER:
+            SDL_SetRenderDrawColor(renderizador, 80, 10, 10, 255);
+            SDL_RenderClear(renderizador);
+            break;
+    }
+
+    SDL_RenderPresent(renderizador);
+}
 
 void limpiarMemoria() {
     // Destruimos los punteros crudos para evitar Memory Leaks
