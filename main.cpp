@@ -80,6 +80,7 @@ void inicializarSistema() {
 
 void procesarEntrada() {
     SDL_Event evento;
+    // Extraemos las interrupciones de la cola del Sistema Operativo
     while (SDL_PollEvent(&evento)) {
         if (evento.type == SDL_QUIT) {
             juegoActivo = false;
@@ -88,10 +89,16 @@ void procesarEntrada() {
             if (evento.key.keysym.sym == SDLK_ESCAPE) {
                 juegoActivo = false;
             }
-            // Transición de estado: Presionar ENTER para jugar
-            else if (evento.key.keysym.sym == SDLK_RETURN && estadoActual == EstadoJuego::MENU_PRINCIPAL) {
+            // Interceptamos AMBOS códigos de hardware para la tecla Enter
+            else if ((evento.key.keysym.sym == SDLK_RETURN || 
+                      evento.key.keysym.sym == SDLK_KP_ENTER) && 
+                     estadoActual == EstadoJuego::MENU_PRINCIPAL) {
+                
                 estadoActual = EstadoJuego::JUGANDO;
-                crearTablero(10, 10); // Reservamos la memoria del tablero
+                crearTablero(10, 10); // Reservamos la memoria del tablero en el Heap
+                
+                // Nota: En Windows con WIN32_EXECUTABLE, este cout será invisible, 
+                // pero la transición de estado ocurrirá en la RAM.
                 std::cout << "Tecla ENTER detectada. Cambiando a JUGANDO...\n";
             }
         }
