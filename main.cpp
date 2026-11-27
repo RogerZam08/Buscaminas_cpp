@@ -12,6 +12,7 @@
 #include <array>        // Contenedor de tamaño fijo en el Stack para cachear dígitos 1..8
 #include <string>       // Manejo seguro de texto (std::string, std::to_string)
 #include <random>       // Motor pseudoaleatorio moderno C++11 (std::mt19937)
+#include <utility>     // std::swap
 
 // ============================================================================
 // 1. MÁQUINA DE ESTADOS FINITOS (FSM)
@@ -49,8 +50,8 @@ static_assert(OFFSET_X >= 0,
               "Error: El tablero excede el ancho de la ventana.");
 static_assert(OFFSET_Y + (FILAS * TAMANO_CASILLA) <= ALTO_VENTANA,
               "Error: El tablero excede el alto de la ventana.");
-static_assert(TOTAL_MINAS < FILAS * COLUMNAS,
-              "Error: Debe haber menos minas que casillas totales.");
+static_assert(TOTAL_MINAS <= (FILAS * COLUMNAS) - 9,
+              "Error: No caben las minas respetando una zona segura 3x3.");
 
 // ============================================================================
 // 3. ESTRUCTURAS DE DATOS (LAYOUT EN MEMORIA)
@@ -80,6 +81,7 @@ bool juegoActivo = true;
 EstadoJuego estadoActual = EstadoJuego::MENU_PRINCIPAL;
 int casillasSegurasReveladas = 0; // Permite verificar victoria en O(1) sin recorrer la matriz
 int banderasColocadas = 0;        // Controla el contador HUD: TOTAL_MINAS - banderasColocadas
+bool primerClicPendiente = true;  // Controla la generación diferida de minas
 
 // Matriz 2D en el Heap: un vector de 15 filas donde cada fila apunta a un bloque
 // contiguo de 15 structs Casilla (15 * 8 = 120 bytes por fila).
@@ -115,7 +117,7 @@ std::array<SDL_Texture*, 9> texturasNumeros{};
 TextoVRAM crearTextoCentrado(TTF_Font* fuente, const std::string& mensaje, SDL_Color color, int centroY);
 void destruirTexto(TextoVRAM& t);
 void crearTablero(int filas, int columnas);
-void colocarMinas(int cantidadMinas);
+void colocarMinas(int cantidadMinas, int filaSegura, int colSegura);
 void calcularMinasVecinas();
 void actualizarTexturaContador();
 void iniciarNuevaPartida();
@@ -180,27 +182,39 @@ void crearTablero(int filas, int columnas) {
 }
 
 // Distribuye 'cantidadMinas' minas de forma uniforme y sin repeticiones.
-void colocarMinas(int cantidadMinas) {
-    // std::random_device obtiene entropía real del sistema operativo/hardware como semilla
-    std::random_device rd;
-    // std::mt19937 (Mersenne Twister) genera números pseudoaleatorios de alta calidad
-    std::mt19937 generador(rd());
-    // Distribuciones uniformes inclusivas [0, N-1]: evitan el sesgo de módulo de rand() % N
-    std::uniform_int_distribution<int> distFila(0, FILAS - 1);
-    std::uniform_int_distribution<int> distCol(0, COLUMNAS - 1);
+void colocarMinas(int cantidadMinas, int filaSegura, int colSegura) {
+    // 1. Recolectar índices lineales (f * COLUMNAS + c) fuera de la zona 3x3
+    std::vector<int> candidatas;
+    candidatas.reserve(FILAS * COLUMNAS);
 
-    int minasColocadas = 0;
-    while (minasColocadas < cantidadMinas) {
-        int f = distFila(generador);
-        int c = distCol(generador);
+    for (int f = 0; f < FILAS; ++f) {
+        for (int c = 0; c < COLUMNAS; ++c) {
+            int df = f - filaSegura;
+            int dc = c - colSegura;
+            if (df >= -1 && df <= 1 && dc >= -1 && dc <= 1) continue;
 
-        // Verificamos que la casilla esté vacía para no superponer dos minas
-        if (!tablero[f][c].tieneMina) {
-            tablero[f][c].tieneMina = true;
-            minasColocadas++;
+            candidatas.push_back(f * COLUMNAS + c);
         }
     }
-    std::cout << cantidadMinas << " minas colocadas aleatoriamente.\n";
+
+    // 2. Motor estático: se siembra una sola vez durante la ejecución del programa
+    static std::mt19937 generador(std::random_device{}());
+
+    // 3. Barajado parcial de Fisher-Yates (exactamente 'cantidadMinas' swaps)
+    const int totalCandidatas = static_cast<int>(candidatas.size());
+    for (int i = 0; i < cantidadMinas; ++i) {
+        std::uniform_int_distribution<int> dist(i, totalCandidatas - 1);
+        int j = dist(generador);
+        std::swap(candidatas[i], candidatas[j]);
+
+        int idx = candidatas[i];
+        int f = idx / COLUMNAS;
+        int c = idx % COLUMNAS;
+        tablero[f][c].tieneMina = true;
+    }
+
+    std::cout << cantidadMinas << " minas colocadas (zona segura en "
+              << filaSegura << ", " << colSegura << ").\n";
 }
 
 // Recorre toda la matriz O(FILAS * COLUMNAS) y precalcula cuántas minas hay en
@@ -251,11 +265,10 @@ void actualizarTexturaContador() {
 // Agrupa todos los pasos necesarios para arrancar o reiniciar una partida limpia.
 void iniciarNuevaPartida() {
     crearTablero(FILAS, COLUMNAS);
-    colocarMinas(TOTAL_MINAS);
-    calcularMinasVecinas();
+    primerClicPendiente = true;
     actualizarTexturaContador();
     estadoActual = EstadoJuego::JUGANDO;
-    std::cout << "Partida 15x15 iniciada.\n";
+    std::cout << "Partida 15x15 lista. Esperando primer clic.\n";
 }
 
 // Alterna el estado de bandera con clic derecho en una casilla aún oculta.
@@ -278,7 +291,14 @@ void revelarCasilla(int fila, int col) {
     if (fila < 0 || fila >= FILAS || col < 0 || col >= COLUMNAS) return;
     if (estadoActual != EstadoJuego::JUGANDO) return;
     if (tablero[fila][col].descubierta || tablero[fila][col].tieneBandera) return;
-
+    
+    // Generar las minas recién en el primer clic izquierdo efectivo
+    if (primerClicPendiente) {
+        colocarMinas(TOTAL_MINAS, fila, col);
+        calcularMinasVecinas();
+        primerClicPendiente = false;
+    }
+    
     // Marcamos 'descubierta = true' ANTES de llamar recursivamente.
     // Esto garantiza progreso hacia el caso base y corta ciclos infinitos en el Stack.
     tablero[fila][col].descubierta = true;
